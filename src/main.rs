@@ -1,5 +1,5 @@
 use nom::{
-    bytes::streaming::{tag, take_while1},
+    bytes::streaming::{tag, take_while1, take_while},
     sequence::tuple,
     IResult,
 };
@@ -18,23 +18,53 @@ fn main() {
         std::process::exit(1);
     });
 
-    println!("{:#?}", host_line(&data));
+    println!("{:#?}", host_block(&data));
 }
 
 #[derive(Debug)]
-struct Host<'a> {
-    name: &'a str,
+struct Host {
+    name: String,
+    properties: Vec<(String, String)>
 }
 
-fn host_line(i: &str) -> IResult<&str, Host> {
+fn whitespace(i: &str) -> IResult<&str, &str> {
+    take_while1(|c: char| c.is_whitespace())(i)
+}
+
+fn maybe_whitespace(i: &str) -> IResult<&str, &str> {
+    take_while(|c: char| c.is_whitespace())(i)
+}
+
+fn line_end(i: &str) -> IResult<&str, &str> {
+    tag("\n")(i)
+}
+
+fn string(i: &str) -> IResult<&str, &str> {
+    take_while1(|c: char| !c.is_whitespace())(i)
+}
+
+fn host_line(i: &str) -> IResult<&str, &str> {
     let host = tag("Host");
-    let space = take_while1(|c: char| c.is_whitespace());
-    let name_str = take_while1(|c: char| !c.is_whitespace());
-    let line_end = tag("\n");
+    let parser = tuple((maybe_whitespace, host, whitespace, string, line_end));
 
-    let parser = tuple((host, space, name_str, line_end));
+    let (input, (_, _, _, name, _)) = parser(i)?;
 
-    let (input, (_, _, name, _)) = parser(i)?;
+    Ok((input, name))
+}
 
-    Ok((input, Host { name }))
+fn property_line(i: &str) -> IResult<&str, (&str, &str)> {
+    let parser = tuple((maybe_whitespace, string, whitespace, string, line_end));
+    let (input, (_, key, _, value, _)) = parser(i)?;
+
+    Ok((input, (key, value)))
+}
+
+fn host_block(i: &str) -> IResult<&str, Host> {
+    let parser = tuple((host_line, property_line));
+    let (input, (host, property)) = parser(i)?;
+
+    let (key, value) = property;
+
+    let host_struct = Host { name: String::from(host), properties: vec![(String::from(key), String::from(value))] };
+    Ok((input, host_struct))
 }
