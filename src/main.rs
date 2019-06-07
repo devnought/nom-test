@@ -1,5 +1,6 @@
 use nom::{
-    bytes::streaming::{tag, take_while1, take_while},
+    branch::alt,
+    bytes::streaming::{tag, take_while, take_while1},
     sequence::tuple,
     IResult,
 };
@@ -24,7 +25,7 @@ fn main() {
 #[derive(Debug)]
 struct Host<'a> {
     name: &'a str,
-    properties: Vec<(&'a str, &'a str)>
+    properties: Vec<(&'a str, &'a str)>,
 }
 
 fn whitespace(i: &str) -> IResult<&str, &str> {
@@ -36,7 +37,10 @@ fn maybe_whitespace(i: &str) -> IResult<&str, &str> {
 }
 
 fn line_end(i: &str) -> IResult<&str, &str> {
-    tag("\n")(i)
+    let crlf = tag("\r\n");
+    let lf = tag("\n");
+
+    alt((crlf, lf))(i)
 }
 
 fn string(i: &str) -> IResult<&str, &str> {
@@ -63,6 +67,10 @@ fn host_block(i: &str) -> IResult<&str, Host> {
     let parser = tuple((host_line, property_line));
     let (input, (host, property)) = parser(i)?;
 
-    let host_struct = Host { name: host, properties: vec![property] };
+    let host_struct = Host {
+        name: host,
+        properties: vec![property],
+    };
+
     Ok((input, host_struct))
 }
