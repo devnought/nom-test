@@ -28,12 +28,16 @@ struct Host<'a> {
     properties: Vec<(&'a str, &'a str)>,
 }
 
+fn whitespace_def(c: char) -> bool {
+    c != '\r' && c != '\n' && c.is_whitespace()
+}
+
 fn whitespace(i: &str) -> IResult<&str, &str> {
-    take_while1(|c: char| c.is_whitespace())(i)
+    take_while1(whitespace_def)(i)
 }
 
 fn maybe_whitespace(i: &str) -> IResult<&str, &str> {
-    take_while(|c: char| c.is_whitespace())(i)
+    take_while(whitespace_def)(i)
 }
 
 fn line_end(i: &str) -> IResult<&str, &str> {
@@ -49,16 +53,16 @@ fn string(i: &str) -> IResult<&str, &str> {
 
 fn host_line(i: &str) -> IResult<&str, &str> {
     let host = tag("Host");
-    let parser = tuple((maybe_whitespace, host, whitespace, string, line_end));
+    let parser = tuple((maybe_whitespace, host, whitespace, string, maybe_whitespace, line_end));
 
-    let (input, (_, _, _, name, _)) = parser(i)?;
+    let (input, (_, _, _, name, _, _)) = parser(i)?;
 
     Ok((input, name))
 }
 
 fn property_line(i: &str) -> IResult<&str, (&str, &str)> {
-    let parser = tuple((maybe_whitespace, string, whitespace, string, line_end));
-    let (input, (_, key, _, value, _)) = parser(i)?;
+    let parser = tuple((maybe_whitespace, string, whitespace, string, maybe_whitespace, line_end));
+    let (input, (_, key, _, value, _, _)) = parser(i)?;
 
     Ok((input, (key, value)))
 }
