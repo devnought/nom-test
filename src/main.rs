@@ -22,9 +22,9 @@ fn main() {
 }
 
 #[derive(Debug)]
-struct Host {
-    name: String,
-    properties: Vec<(String, String)>
+struct Host<'a> {
+    name: &'a str,
+    properties: Vec<(&'a str, &'a str)>
 }
 
 fn whitespace(i: &str) -> IResult<&str, &str> {
@@ -63,8 +63,6 @@ fn host_block(i: &str) -> IResult<&str, Host> {
     let parser = tuple((host_line, property_line));
     let (input, (host, property)) = parser(i)?;
 
-    let (key, value) = property;
-
-    let host_struct = Host { name: String::from(host), properties: vec![(String::from(key), String::from(value))] };
+    let host_struct = Host { name: host, properties: vec![property] };
     Ok((input, host_struct))
 }
