@@ -1,5 +1,6 @@
 use nom::{
-    bytes::complete::{tag, take},
+    bytes::streaming::{tag, take_while1},
+    sequence::tuple,
     IResult,
 };
 use std::{fs, path::PathBuf};
@@ -17,9 +18,23 @@ fn main() {
         std::process::exit(1);
     });
 
-    println!("{:#?}", abcd_parser(&data));
+    println!("{:#?}", host_line(&data));
 }
 
-fn abcd_parser(i: &str) -> IResult<&str, &str> {
-    tag("abcd")(i) // will consume bytes if the input begins with "abcd"
+#[derive(Debug)]
+struct Host<'a> {
+    name: &'a str,
+}
+
+fn host_line(i: &str) -> IResult<&str, Host> {
+    let host = tag("Host");
+    let space = take_while1(|c: char| c.is_whitespace());
+    let name_str = take_while1(|c: char| !c.is_whitespace());
+    let line_end = tag("\n");
+
+    let parser = tuple((host, space, name_str, line_end));
+
+    let (input, (_, _, name, _)) = parser(i)?;
+
+    Ok((input, Host { name }))
 }
