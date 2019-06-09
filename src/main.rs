@@ -1,3 +1,8 @@
+// Many incorrect assumptions were made when creating this initially.
+// See the following for a better description on the format:
+// https://www.cyberciti.biz/faq/create-ssh-config-file-on-linux-unix/
+// https://linux.die.net/man/5/ssh_config
+
 use nom::{
     branch::alt,
     bytes::streaming::{tag, take_while, take_while1},
@@ -21,15 +26,7 @@ fn main() {
         std::process::exit(1);
     });
 
-    let (input, h1) = host_block(&data).unwrap();
-
-    println!("{:#?}", h1);
-    println!("{:#?}", input);
-
-    let (input, h2) = host_block(input).expect("H2 messed up");
-
-    println!("{:#?}", h2);
-    println!("{:#?}", input);
+    println!("{:#?}", hosts(&data));
 }
 
 #[derive(Debug)]
@@ -71,6 +68,10 @@ fn string(i: &str) -> IResult<&str, &str> {
     take_while1(|c: char| !c.is_whitespace())(i)
 }
 
+fn string_not_eol(i: &str) -> IResult<&str, &str> {
+    take_while1(|c: char| c != '\r' && c != '\n')(i)
+}
+
 fn host_line(i: &str) -> IResult<&str, &str> {
     let host = tag("Host");
     let parser = tuple((maybe_whitespace, host, whitespace, string, line_end));
@@ -80,8 +81,12 @@ fn host_line(i: &str) -> IResult<&str, &str> {
     Ok((input, name))
 }
 
+// TODO: Property should become something like
+// Property { key, tokens }
+// or
+// Property { key, values }
 fn property_line(i: &str) -> IResult<&str, Property> {
-    let parser = tuple((maybe_whitespace, string, whitespace, string, line_end));
+    let parser = tuple((maybe_whitespace, string, whitespace, string_not_eol, line_end));
     let (input, (_, key, _, value, _)) = parser(i)?;
 
     Ok((input, Property { key, value }))
@@ -106,8 +111,5 @@ fn host_block(i: &str) -> IResult<&str, Host> {
 }
 
 fn hosts(i: &str) -> IResult<&str, Vec<Host>> {
-    let parser = many_till(host_block, line_end);
-    let (input, (hosts, _)) = parser(i)?;
-
-    Ok((input, hosts))
+    many0(host_block)(i)
 }
