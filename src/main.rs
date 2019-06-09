@@ -1,6 +1,8 @@
 use nom::{
     branch::alt,
     bytes::streaming::{tag, take_while, take_while1},
+    combinator::peek,
+    multi::{many0, many_till},
     sequence::tuple,
     IResult,
 };
@@ -19,13 +21,27 @@ fn main() {
         std::process::exit(1);
     });
 
-    println!("{:#?}", host_block(&data));
+    let (input, h1) = host_block(&data).unwrap();
+
+    println!("{:#?}", h1);
+    println!("{:#?}", input);
+
+    let (input, h2) = host_block(input).expect("H2 messed up");
+
+    println!("{:#?}", h2);
+    println!("{:#?}", input);
 }
 
 #[derive(Debug)]
 struct Host<'a> {
     name: &'a str,
-    properties: Vec<(&'a str, &'a str)>,
+    properties: Vec<Property<'a>>,
+}
+
+#[derive(Debug)]
+struct Property<'a> {
+    key: &'a str,
+    value: &'a str,
 }
 
 fn whitespace_def(c: char) -> bool {
@@ -64,21 +80,34 @@ fn host_line(i: &str) -> IResult<&str, &str> {
     Ok((input, name))
 }
 
-fn property_line(i: &str) -> IResult<&str, (&str, &str)> {
+fn property_line(i: &str) -> IResult<&str, Property> {
     let parser = tuple((maybe_whitespace, string, whitespace, string, line_end));
     let (input, (_, key, _, value, _)) = parser(i)?;
 
-    Ok((input, (key, value)))
+    Ok((input, Property { key, value }))
+}
+
+fn properties(i: &str) -> IResult<&str, (Vec<Property>, &str)> {
+    let parser = alt((peek(host_line), line_end));
+    many_till(property_line, parser)(i)
 }
 
 fn host_block(i: &str) -> IResult<&str, Host> {
-    let parser = tuple((host_line, property_line));
-    let (input, (host, property)) = parser(i)?;
+    let parser = tuple((host_line, properties));
+    let (input, (host, p)) = parser(i)?;
+    let (props, _) = p;
 
     let host_struct = Host {
         name: host,
-        properties: vec![property],
+        properties: props,
     };
 
     Ok((input, host_struct))
+}
+
+fn hosts(i: &str) -> IResult<&str, Vec<Host>> {
+    let parser = many_till(host_block, line_end);
+    let (input, (hosts, _)) = parser(i)?;
+
+    Ok((input, hosts))
 }
