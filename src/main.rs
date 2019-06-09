@@ -85,8 +85,15 @@ fn host_line(i: &str) -> IResult<&str, &str> {
 // Property { key, tokens }
 // or
 // Property { key, values }
+// to handle the case where a key has multple values, like for `LocalForward`
 fn property_line(i: &str) -> IResult<&str, Property> {
-    let parser = tuple((maybe_whitespace, string, whitespace, string_not_eol, line_end));
+    let parser = tuple((
+        maybe_whitespace,
+        string,
+        whitespace,
+        string_not_eol,
+        line_end,
+    ));
     let (input, (_, key, _, value, _)) = parser(i)?;
 
     Ok((input, Property { key, value }))
@@ -112,4 +119,25 @@ fn host_block(i: &str) -> IResult<&str, Host> {
 
 fn hosts(i: &str) -> IResult<&str, Vec<Host>> {
     many0(host_block)(i)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn host_line_newline() {
+        let (input, host) = host_line("Host dev\n").expect("Could not parse host line ending in '\\n'");
+        assert_eq!("dev", host);
+        assert_eq!("", input);
+
+        let (input, host) = host_line("Host dev-man\r\n").expect("Could not parse host line ending in '\\r\\n'");
+        assert_eq!("dev-man", host);
+        assert_eq!("", input);
+    }
+
+    #[test]
+    fn host_line_no_newline() {
+        host_line("Host dev").expect("Could not parse host line without terminating newline");
+    }
 }
