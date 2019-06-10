@@ -5,8 +5,8 @@
 
 use nom::{
     branch::alt,
-    bytes::streaming::{tag, take_while, take_while1},
-    character::streaming::line_ending,
+    bytes::streaming::{tag, take_while1},
+    character::streaming::{line_ending, not_line_ending, space0, space1},
     combinator::peek,
     multi::{many0, many_till},
     sequence::tuple,
@@ -42,36 +42,13 @@ struct Property<'a> {
     value: &'a str,
 }
 
-fn whitespace_def(c: char) -> bool {
-    c != '\r' && c != '\n' && c.is_whitespace()
-}
-
-fn whitespace(i: &str) -> IResult<&str, &str> {
-    take_while1(whitespace_def)(i)
-}
-
-fn maybe_whitespace(i: &str) -> IResult<&str, &str> {
-    take_while(whitespace_def)(i)
-}
-
 fn string(i: &str) -> IResult<&str, &str> {
     take_while1(|c: char| !c.is_whitespace())(i)
 }
 
-fn string_not_eol(i: &str) -> IResult<&str, &str> {
-    take_while1(|c: char| c != '\r' && c != '\n')(i)
-}
-
 fn host_line(i: &str) -> IResult<&str, &str> {
     let host = tag("Host");
-    let parser = tuple((
-        maybe_whitespace,
-        host,
-        whitespace,
-        string,
-        maybe_whitespace,
-        line_ending,
-    ));
+    let parser = tuple((space0, host, space1, string, space0, line_ending));
 
     let (input, (_, _, _, name, _, _)) = parser(i)?;
 
@@ -84,13 +61,7 @@ fn host_line(i: &str) -> IResult<&str, &str> {
 // Property { key, values }
 // to handle the case where a key has multple values, like for `LocalForward`
 fn property_line(i: &str) -> IResult<&str, Property> {
-    let parser = tuple((
-        maybe_whitespace,
-        string,
-        whitespace,
-        string_not_eol,
-        line_ending,
-    ));
+    let parser = tuple((space0, string, space1, not_line_ending, line_ending));
     let (input, (_, key, _, value, _)) = parser(i)?;
 
     Ok((input, Property { key, value }))
