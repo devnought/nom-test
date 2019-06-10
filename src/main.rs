@@ -6,6 +6,7 @@
 use nom::{
     branch::alt,
     bytes::streaming::{tag, take_while, take_while1},
+    character::streaming::line_ending,
     combinator::peek,
     multi::{many0, many_till},
     sequence::tuple,
@@ -53,17 +54,6 @@ fn maybe_whitespace(i: &str) -> IResult<&str, &str> {
     take_while(whitespace_def)(i)
 }
 
-fn line_end(i: &str) -> IResult<&str, &str> {
-    let crlf = tag("\r\n");
-    let lf = tag("\n");
-    let ending = alt((crlf, lf));
-    let parser = tuple((maybe_whitespace, ending));
-
-    let (input, (_, end)) = parser(i)?;
-
-    Ok((input, end))
-}
-
 fn string(i: &str) -> IResult<&str, &str> {
     take_while1(|c: char| !c.is_whitespace())(i)
 }
@@ -74,9 +64,16 @@ fn string_not_eol(i: &str) -> IResult<&str, &str> {
 
 fn host_line(i: &str) -> IResult<&str, &str> {
     let host = tag("Host");
-    let parser = tuple((maybe_whitespace, host, whitespace, string, line_end));
+    let parser = tuple((
+        maybe_whitespace,
+        host,
+        whitespace,
+        string,
+        maybe_whitespace,
+        line_ending,
+    ));
 
-    let (input, (_, _, _, name, _)) = parser(i)?;
+    let (input, (_, _, _, name, _, _)) = parser(i)?;
 
     Ok((input, name))
 }
@@ -92,7 +89,7 @@ fn property_line(i: &str) -> IResult<&str, Property> {
         string,
         whitespace,
         string_not_eol,
-        line_end,
+        line_ending,
     ));
     let (input, (_, key, _, value, _)) = parser(i)?;
 
@@ -100,7 +97,7 @@ fn property_line(i: &str) -> IResult<&str, Property> {
 }
 
 fn properties(i: &str) -> IResult<&str, (Vec<Property>, &str)> {
-    let parser = alt((peek(host_line), line_end));
+    let parser = alt((peek(host_line), line_ending));
     many_till(property_line, parser)(i)
 }
 
@@ -127,11 +124,13 @@ mod tests {
 
     #[test]
     fn host_line_newline() {
-        let (input, host) = host_line("Host dev\n").expect("Could not parse host line ending in '\\n'");
+        let (input, host) =
+            host_line("Host dev\n").expect("Could not parse host line ending in '\\n'");
         assert_eq!("dev", host);
         assert_eq!("", input);
 
-        let (input, host) = host_line("Host dev-man\r\n").expect("Could not parse host line ending in '\\r\\n'");
+        let (input, host) =
+            host_line("Host dev-man\r\n").expect("Could not parse host line ending in '\\r\\n'");
         assert_eq!("dev-man", host);
         assert_eq!("", input);
     }
