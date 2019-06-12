@@ -46,9 +46,7 @@ fn string(i: &str) -> IResult<&str, &str> {
     take_while1(|c: char| !c.is_whitespace())(i)
 }
 
-fn complete_string(i: &str) -> IResult<&str, &str> {
-    let res = complete(string)(i);
-
+fn err_str_map<'a>(res: IResult<&'a str, &'a str>) -> IResult<&'a str, &'a str> {
     if let Err(nom::Err::Error((value, nom::error::ErrorKind::Complete))) = res {
         if !value.is_empty() {
             Ok(("", value))
@@ -60,9 +58,7 @@ fn complete_string(i: &str) -> IResult<&str, &str> {
     }
 }
 
-fn complete_space0(i: &str) -> IResult<&str, &str> {
-    let res = space0(i);
-
+fn err_empty_map<'a>(res: IResult<&'a str, &'a str>) -> IResult<&'a str, &'a str> {
     if let Err(nom::Err::Incomplete(nom::Needed::Size(1))) = res {
         Ok(("", ""))
     } else {
@@ -70,28 +66,24 @@ fn complete_space0(i: &str) -> IResult<&str, &str> {
     }
 }
 
-fn complete_line_ending(i: &str) -> IResult<&str, &str> {
-    let res = line_ending(i);
-
-    if let Err(nom::Err::Incomplete(nom::Needed::Size(1))) = res {
-        Ok(("", ""))
-    } else {
-        res
-    }
+fn complete_string(i: &str) -> IResult<&str, &str> {
+    let res = complete(string)(i);
+    err_str_map(res)
 }
 
 fn complete_not_line_ending(i: &str) -> IResult<&str, &str> {
     let res = complete(not_line_ending)(i);
+    err_str_map(res)
+}
 
-    if let Err(nom::Err::Error((value, nom::error::ErrorKind::Complete))) = res {
-        if !value.is_empty() {
-            Ok(("", value))
-        } else {
-            res
-        }
-    } else {
-        res
-    }
+fn complete_space0(i: &str) -> IResult<&str, &str> {
+    let res = space0(i);
+    err_empty_map(res)
+}
+
+fn complete_line_ending(i: &str) -> IResult<&str, &str> {
+    let res = line_ending(i);
+    err_empty_map(res)
 }
 
 fn host_line(i: &str) -> IResult<&str, &str> {
