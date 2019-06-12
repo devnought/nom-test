@@ -211,4 +211,22 @@ mod tests {
             property
         );
     }
+
+    #[test]
+    fn properties_end_newline() {
+        let _expected_properties = vec![
+            Property {
+                key: "Test",
+                value: "man",
+            },
+            Property {
+                key: "Asd",
+                value: "123",
+            },
+        ];
+
+        let (input, _properties) =
+            properties("Test man\nAsd 123\n").expect("Could not parse properties");
+        assert_eq!("", input);
+    }
 }
