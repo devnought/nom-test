@@ -36,7 +36,7 @@ struct Host<'a> {
     properties: Vec<Property<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(PartialEq, Debug)]
 struct Property<'a> {
     key: &'a str,
     value: &'a str,
@@ -80,6 +80,20 @@ fn complete_line_ending(i: &str) -> IResult<&str, &str> {
     }
 }
 
+fn complete_not_line_ending(i: &str) -> IResult<&str, &str> {
+    let res = complete(not_line_ending)(i);
+
+    if let Err(nom::Err::Error((value, nom::error::ErrorKind::Complete))) = res {
+        if !value.is_empty() {
+            Ok(("", value))
+        } else {
+            res
+        }
+    } else {
+        res
+    }
+}
+
 fn host_line(i: &str) -> IResult<&str, &str> {
     let host = tag("Host");
     let parser = tuple((
@@ -102,10 +116,22 @@ fn host_line(i: &str) -> IResult<&str, &str> {
 // Property { key, values }
 // to handle the case where a key has multple values, like for `LocalForward`
 fn property_line(i: &str) -> IResult<&str, Property> {
-    let parser = tuple((space0, string, space1, not_line_ending, complete_line_ending));
+    let parser = tuple((
+        space0,
+        string,
+        space1,
+        complete_not_line_ending,
+        complete_line_ending,
+    ));
     let (input, (_, key, _, value, _)) = parser(i)?;
 
-    Ok((input, Property { key, value }))
+    Ok((
+        input,
+        Property {
+            key,
+            value: value.trim(),
+        },
+    ))
 }
 
 fn properties(i: &str) -> IResult<&str, (Vec<Property>, &str)> {
@@ -153,5 +179,44 @@ mod tests {
             host_line("Host dev").expect("Could not parse host line without terminating newline");
         assert_eq!("", input);
         assert_eq!("dev", host);
+    }
+
+    #[test]
+    fn property_line_newline() {
+        let (input, property) =
+            property_line("Asd 123\n").expect("Could not parse property line ending in '\\n'");
+        assert_eq!("", input);
+        assert_eq!(
+            Property {
+                key: "Asd",
+                value: "123"
+            },
+            property
+        );
+
+        let (input, property) = property_line("Qwe hello there   \r\n")
+            .expect("Could not parse property line ending in '\\r\\n'");
+        assert_eq!("", input);
+        assert_eq!(
+            Property {
+                key: "Qwe",
+                value: "hello there"
+            },
+            property
+        );
+    }
+
+    #[test]
+    fn property_line_no_newline() {
+        let (input, property) = property_line("Test man")
+            .expect("Could not parse property line without terminating newline");
+        assert_eq!("", input);
+        assert_eq!(
+            Property {
+                key: "Test",
+                value: "man"
+            },
+            property
+        );
     }
 }
