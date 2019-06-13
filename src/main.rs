@@ -199,7 +199,7 @@ mod tests {
         let (input, properties) = properties(
             "   \n\n\n HostName database.example.com\n    IdentityFile ~/.ssh/coolio.example.key\n\n\n\n\n\n\nAsd 123",
         )
-        .expect("Coult not parse property collection");
+        .expect("Could not parse property collection");
 
         let expected_properties = vec![
             Property {
@@ -229,7 +229,7 @@ mod tests {
              Asd 123\n      \
              Host devv\n\n",
         )
-        .expect("Coult not parse property collection");
+        .expect("Could not parse property collection");
 
         let expected_properties = vec![
             Property {
