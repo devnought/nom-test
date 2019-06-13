@@ -5,9 +5,9 @@
 
 use nom::{
     branch::alt,
-    bytes::streaming::{tag, take_while1},
-    character::streaming::{line_ending, not_line_ending, space0, space1},
-    combinator::{complete, peek},
+    bytes::complete::{tag, take_while1},
+    character::complete::{line_ending, not_line_ending, space0, space1},
+    combinator::{opt, peek},
     multi::{many0, many_till},
     sequence::tuple,
     IResult,
@@ -46,48 +46,9 @@ fn string(i: &str) -> IResult<&str, &str> {
     take_while1(|c: char| !c.is_whitespace())(i)
 }
 
-fn err_str_map<'a>(res: IResult<&'a str, &'a str>) -> IResult<&'a str, &'a str> {
-    match res {
-        Err(nom::Err::Error((value, nom::error::ErrorKind::Complete))) if !value.is_empty() => {
-            Ok(("", value))
-        }
-        _ => res,
-    }
-}
-
-fn err_empty_map<'a>(res: IResult<&'a str, &'a str>) -> IResult<&'a str, &'a str> {
-    match res {
-        Err(nom::Err::Incomplete(nom::Needed::Size(1))) => Ok(("", "")),
-        _ => res,
-    }
-}
-
-fn complete_string(i: &str) -> IResult<&str, &str> {
-    err_str_map(complete(string)(i))
-}
-
-fn complete_not_line_ending(i: &str) -> IResult<&str, &str> {
-    err_str_map(complete(not_line_ending)(i))
-}
-
-fn complete_space0(i: &str) -> IResult<&str, &str> {
-    err_empty_map(space0(i))
-}
-
-fn complete_line_ending(i: &str) -> IResult<&str, &str> {
-    err_empty_map(line_ending(i))
-}
-
 fn host_line(i: &str) -> IResult<&str, &str> {
     let host = tag("Host");
-    let parser = tuple((
-        space0,
-        host,
-        space1,
-        complete_string,
-        complete_space0,
-        complete_line_ending,
-    ));
+    let parser = tuple((space0, host, space1, string, space0, opt(line_ending)));
 
     let (input, (_, _, _, name, _, _)) = parser(i)?;
 
@@ -100,13 +61,7 @@ fn host_line(i: &str) -> IResult<&str, &str> {
 // Property { key, values }
 // to handle the case where a key has multple values, like for `LocalForward`
 fn property_line(i: &str) -> IResult<&str, Property> {
-    let parser = tuple((
-        space0,
-        string,
-        space1,
-        complete_not_line_ending,
-        complete_line_ending,
-    ));
+    let parser = tuple((space0, string, space1, not_line_ending, opt(line_ending)));
     let (input, (_, key, _, value, _)) = parser(i)?;
 
     Ok((
@@ -119,7 +74,7 @@ fn property_line(i: &str) -> IResult<&str, Property> {
 }
 
 fn properties(i: &str) -> IResult<&str, (Vec<Property>, &str)> {
-    let parser = alt((peek(host_line), complete_line_ending));
+    let parser = alt((peek(host_line), line_ending));
     many_till(property_line, parser)(i)
 }
 
