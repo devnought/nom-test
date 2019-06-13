@@ -111,6 +111,51 @@ mod tests {
     use super::*;
 
     #[test]
+    fn empty_string() {
+        if let Ok(_) = string("") {
+            panic!("Should not be able to parse empty string as valid string");
+        }
+    }
+
+    #[test]
+    fn newline_string() {
+        if let Ok(_) = string("\n") {
+            panic!("Should not be able to parse newline as valid string");
+        }
+    }
+
+    #[test]
+    fn string_all_whitespace() {
+        if let Ok(_) = string("      ") {
+            panic!("Should not be able to parse all-spaces as valid string");
+        }
+    }
+
+    #[test]
+    fn string_begins_with_whitespace() {
+        if let Ok(_) = string("   this") {
+            panic!("Should not be able to parse leading-whitespace string as valid string");
+        }
+    }
+
+    #[test]
+    fn string_ends_in_whitespace() {
+        let (input, value) = string("test-str   ").expect("Could not parse string");
+
+        assert_eq!("   ", input);
+        assert_eq!("test-str", value);
+    }
+
+    #[test]
+    fn string_no_whitespace() {
+        let good_input = "asd123-456...\\[]";
+        let (input, value) = string(good_input).expect("Could not parse valid complicated string");
+
+        assert_eq!("", input);
+        assert_eq!(good_input, value);
+    }
+
+    #[test]
     fn host_line_newline_linefeed() {
         let (input, host) =
             host_line("Host dev\n").expect("Could not parse host line ending in '\\n'");
