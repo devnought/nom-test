@@ -26,7 +26,7 @@ fn main() {
         std::process::exit(1);
     });
 
-    println!("{:#?}", host_line(&data));
+    println!("{:#?}", hosts(&data));
 }
 
 #[derive(PartialEq, Debug)]
@@ -252,7 +252,7 @@ mod tests {
              \n\n\
              Host zzz",
         )
-        .expect("Could not parse single host block");
+        .expect("Could not parse single host block pair");
 
         let expected_host = Host {
             name: "dev",
@@ -271,7 +271,7 @@ mod tests {
              \n\n\
              Host zzz",
         )
-        .expect("Could not parse single host block");
+        .expect("Could not parse multiple empty hosts");
 
         let expected_hosts = vec![
             Host {
@@ -285,6 +285,88 @@ mod tests {
         ];
 
         assert_eq!("", input);
+        assert_eq!(expected_hosts, hosts);
+    }
+
+    #[test]
+    fn many_hosts() {
+        let (input, hosts) = hosts(
+            "\n\n\n\n     Host old    \n\
+            Asd    123\n\
+            Test zz\
+            \n\n\n\n\n\n\n\
+            Host gregg\n
+            HostName hello\n\n\n\n
+            Other thing\n\n\n",
+        )
+        .expect("Could not parse multple hosts with their properties");
+
+        let expected_hosts = vec![
+            Host {
+                name: "old",
+                properties: vec![
+                    Property {
+                        key: "Asd",
+                        value: "123",
+                    },
+                    Property {
+                        key: "Test",
+                        value: "zz",
+                    },
+                ],
+            },
+            Host {
+                name: "gregg",
+                properties: vec![
+                    Property {
+                        key: "HostName",
+                        value: "hello",
+                    },
+                    Property {
+                        key: "Other",
+                        value: "thing",
+                    },
+                ],
+            },
+        ];
+
+        assert_eq!("", input);
+        assert_eq!(expected_hosts, hosts);
+    }
+
+    #[test]
+    fn no_hosts() {
+        let empty_input = "       ";
+        let (input, hosts) = hosts(empty_input).expect("Could not parse empty string");
+        let expected_hosts: Vec<Host> = vec![];
+
+        assert_eq!(empty_input, input);
+        assert_eq!(expected_hosts, hosts);
+    }
+
+    #[test]
+    fn property_as_host_line() {
+        if let Ok(_) = property_line("       \n\nAsd 123\n\n\n") {
+            panic!("Property is not allowed to be a host line");
+        }
+    }
+
+    #[test]
+    fn proptery_as_host_block() {
+        if let Ok(_) = host_block("       \n\nAsd 123\n\n\n") {
+            panic!("Property is not allowed to be a host block");
+        }
+    }
+
+    #[test]
+    fn proptery_as_hosts() {
+        let bad_input = "       \n\nAsd 123\n\n\n";
+        let (input, hosts) =
+            hosts(bad_input).expect("Could not parse invalid string for host collection");
+
+        let expected_hosts: Vec<Host> = vec![];
+
+        assert_eq!(bad_input, input);
         assert_eq!(expected_hosts, hosts);
     }
 }
