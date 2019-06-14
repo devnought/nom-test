@@ -32,6 +32,20 @@ fn string(i: &str) -> IResult<&str, &str> {
     take_while1(|c: char| !c.is_whitespace())(i)
 }
 
+fn comment(i: &str) -> IResult<&str, &str> {
+    let parser = tuple((space0, tag("#"), not_line_ending, opt(line_ending)));
+    let (input, (_, _, _, _)) = parser(i)?;
+
+    Ok((input, ""))
+}
+
+fn whitespace_or_comment(i: &str) -> IResult<&str, &str> {
+    let parser = many0(tuple((multispace0, comment, multispace0)));
+    let (input, _) = parser(i)?;
+
+    Ok((input, ""))
+}
+
 fn host_line(i: &str) -> IResult<&str, &str> {
     let host = tag("Host");
     let parser = tuple((space0, host, space1, string, space0, opt(line_ending)));
@@ -400,5 +414,37 @@ mod tests {
 
         assert_eq!(bad_input, input);
         assert_eq!(expected_hosts, hosts);
+    }
+
+    #[test]
+    fn comsume_comment() {
+        let (input, result) = comment("#this is a comment").expect("Could not parse comment line");
+
+        assert_eq!("", input);
+        assert_eq!("", result);
+    }
+
+    #[test]
+    fn ignore_comment() {
+        let (input, _) = whitespace_or_comment("# IGNORE ME\nHost asd\nLocal something").expect("Could not parse comment data");
+
+        assert_eq!("Host asd\nLocal something", input);
+    }
+
+    #[test]
+    fn ignore_comments_and_whitespace() {
+        let (input, _) = whitespace_or_comment("\
+            \n\
+            \n\
+            #IGNORE ME\n\
+            #      YUUUUUP
+            \n\
+            \n           \
+            #NOPE
+            \n\
+            Host asd\n\
+            Local something").expect("Could not parse comment data");
+
+        assert_eq!("Host asd\nLocal something", input);
     }
 }
