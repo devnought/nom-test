@@ -4,6 +4,7 @@
 // https://linux.die.net/man/5/ssh_config
 
 use nom::{
+    branch::alt,
     bytes::complete::{tag, take_while1},
     character::complete::{line_ending, multispace0, not_line_ending, space0, space1},
     combinator::{map, not, opt, peek},
@@ -39,6 +40,14 @@ fn comment(i: &str) -> IResult<&str, &str> {
     Ok((input, ""))
 }
 
+fn space_or_comment0(i: &str) -> IResult<&str, &str> {
+    let comment_or_whitespace = alt((comment, multispace0));
+    let parser = many0(comment_or_whitespace);
+    let (input, _) = parser(i)?;
+
+    Ok((input, ""))
+}
+
 fn not_comment(i: &str) -> IResult<&str, &str> {
     take_while1(|c: char| c != '\r' && c != '\n' && c != '#')(i)
 }
@@ -50,11 +59,10 @@ fn host_line(i: &str) -> IResult<&str, &str> {
         space1,
         string,
         space0,
-        opt(comment),
         opt(line_ending),
     ));
 
-    let (input, (_, _, _, name, _, _, _)) = parser(i)?;
+    let (input, (_, _, _, name, _, _)) = parser(i)?;
 
     Ok((input, name))
 }
@@ -81,18 +89,16 @@ fn property_line(i: &str) -> IResult<&str, Property> {
 }
 
 fn properties(i: &str) -> IResult<&str, Vec<Property>> {
-    let parser = many0(tuple((multispace0, property_line, multispace0)));
+    let parser = many0(tuple((space_or_comment0, property_line)));
 
-    let (input, props) = map(parser, |props| {
-        props.into_iter().map(|(_, p, _)| p).collect()
-    })(i)?;
+    let (input, props) = map(parser, |props| props.into_iter().map(|(_, p)| p).collect())(i)?;
 
     Ok((input, props))
 }
 
 fn host_block(i: &str) -> IResult<&str, Host> {
-    let parser = tuple((multispace0, host_line, properties, multispace0));
-    let (input, (_, host_name, properties, _)) = parser(i)?;
+    let parser = tuple((space_or_comment0, host_line, properties));
+    let (input, (_, host_name, properties)) = parser(i)?;
 
     let host = Host {
         name: host_name,
@@ -103,10 +109,8 @@ fn host_block(i: &str) -> IResult<&str, Host> {
 }
 
 fn hosts(i: &str) -> IResult<&str, Vec<Host>> {
-    let parser = many0(tuple((multispace0, host_block, multispace0)));
-    let (input, hosts) = map(parser, |hosts| {
-        hosts.into_iter().map(|(_, h, _)| h).collect()
-    })(i)?;
+    let parser = many0(tuple((space_or_comment0, host_block)));
+    let (input, hosts) = map(parser, |hosts| hosts.into_iter().map(|(_, h)| h).collect())(i)?;
 
     Ok((input, hosts))
 }
