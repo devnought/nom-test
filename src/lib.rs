@@ -39,7 +39,7 @@ fn comment(i: &str) -> IResult<&str, &str> {
     Ok((input, ""))
 }
 
-fn whitespace_or_comment(i: &str) -> IResult<&str, &str> {
+fn comment_or_whitespace(i: &str) -> IResult<&str, &str> {
     let parser = many0(tuple((multispace0, comment, multispace0)));
     let (input, _) = parser(i)?;
 
@@ -77,7 +77,7 @@ fn property_line(i: &str) -> IResult<&str, Property> {
 }
 
 fn properties(i: &str) -> IResult<&str, Vec<Property>> {
-    let parser = many0(tuple((whitespace_or_comment, property_line, whitespace_or_comment)));
+    let parser = many0(tuple((comment_or_whitespace, property_line, comment_or_whitespace)));
 
     let (input, props) = map(parser, |props| {
         props.into_iter().map(|(_, p, _)| p).collect()
@@ -99,7 +99,7 @@ fn host_block(i: &str) -> IResult<&str, Host> {
 }
 
 fn hosts(i: &str) -> IResult<&str, Vec<Host>> {
-    let parser = many0(tuple((whitespace_or_comment, host_block, whitespace_or_comment)));
+    let parser = many0(tuple((comment_or_whitespace, host_block, comment_or_whitespace)));
     let (input, hosts) = map(parser, |hosts| {
         hosts.into_iter().map(|(_, h, _)| h).collect()
     })(i)?;
@@ -426,14 +426,14 @@ mod tests {
 
     #[test]
     fn ignore_comment() {
-        let (input, _) = whitespace_or_comment("# IGNORE ME\nHost asd\nLocal something").expect("Could not parse comment data");
+        let (input, _) = comment_or_whitespace("# IGNORE ME\nHost asd\nLocal something").expect("Could not parse comment data");
 
         assert_eq!("Host asd\nLocal something", input);
     }
 
     #[test]
     fn ignore_comments_and_whitespace() {
-        let (input, _) = whitespace_or_comment("\
+        let (input, _) = comment_or_whitespace("\
             \n\
             \n\
             #IGNORE ME\n\
