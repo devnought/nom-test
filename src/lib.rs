@@ -5,9 +5,9 @@
 
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_while1},
-    character::complete::{line_ending, multispace0, not_line_ending, space0, space1},
-    combinator::{map, not, opt, peek},
+    bytes::complete::{tag, tag_no_case, take_while1},
+    character::complete::{multispace1, not_line_ending, space1},
+    combinator::{map, not, peek},
     multi::many0,
     sequence::tuple,
     IResult,
@@ -30,19 +30,32 @@ pub fn parse(data: &str) -> Result<Vec<Host>, ()> {
 }
 
 fn string(i: &str) -> IResult<&str, &str> {
-    take_while1(|c: char| !c.is_whitespace() && c != '#')(i)
+    take_while1(|c: char| !c.is_whitespace() && c != '=' && c != '#')(i)
 }
 
 fn comment(i: &str) -> IResult<&str, &str> {
-    let parser = tuple((tag("#"), not_line_ending, opt(line_ending)));
-    let (input, (_, _, _)) = parser(i)?;
+    let parser = tuple((tag("#"), not_line_ending));
+    let (input, (_, _)) = parser(i)?;
 
     Ok((input, ""))
 }
 
-fn space_or_comment0(i: &str) -> IResult<&str, &str> {
-    let comment_or_whitespace = alt((comment, multispace0));
-    let parser = many0(comment_or_whitespace);
+fn space_or_equals(i: &str) -> IResult<&str, &str> {
+    let parser = alt((tag("="), space1));
+    let (input, _) = parser(i)?;
+
+    Ok((input, ""))
+}
+
+fn space_or_comment(i: &str) -> IResult<&str, &str> {
+    let parser = alt((comment, multispace1));
+    let (input, _) = parser(i)?;
+
+    Ok((input, ""))
+}
+
+fn spaces_or_comments(i: &str) -> IResult<&str, &str> {
+    let parser = many0(space_or_comment);
     let (input, _) = parser(i)?;
 
     Ok((input, ""))
@@ -53,16 +66,8 @@ fn not_comment(i: &str) -> IResult<&str, &str> {
 }
 
 fn host_line(i: &str) -> IResult<&str, &str> {
-    let parser = tuple((
-        space0,
-        tag("Host"),
-        space1,
-        string,
-        space0,
-        opt(line_ending),
-    ));
-
-    let (input, (_, _, _, name, _, _)) = parser(i)?;
+    let parser = tuple((tag_no_case("host"), space_or_equals, string));
+    let (input, (_, _, name)) = parser(i)?;
 
     Ok((input, name))
 }
@@ -75,9 +80,8 @@ fn host_line(i: &str) -> IResult<&str, &str> {
 fn property_line(i: &str) -> IResult<&str, Property> {
     not(peek(host_line))(i)?;
 
-    let parser = tuple((space0, string, space1, not_comment, opt(line_ending)));
-
-    let (input, (_, key, _, value, _)) = parser(i)?;
+    let parser = tuple((string, space_or_equals, not_comment));
+    let (input, (key, _, value)) = parser(i)?;
 
     Ok((
         input,
@@ -89,28 +93,26 @@ fn property_line(i: &str) -> IResult<&str, Property> {
 }
 
 fn properties(i: &str) -> IResult<&str, Vec<Property>> {
-    let parser = many0(tuple((space_or_comment0, property_line)));
+    let parser = many0(tuple((spaces_or_comments, property_line)));
+    let (input, lines) = map(parser, |props| props.into_iter().map(|(_, x)| x).collect())(i)?;
 
-    let (input, props) = map(parser, |props| props.into_iter().map(|(_, p)| p).collect())(i)?;
-
-    Ok((input, props))
+    Ok((input, lines))
 }
 
 fn host_block(i: &str) -> IResult<&str, Host> {
-    let parser = tuple((space_or_comment0, host_line, properties));
-    let (input, (_, host_name, properties)) = parser(i)?;
+    let parser = tuple((spaces_or_comments, host_line, properties));
+    let (input, (_, name, properties)) = parser(i)?;
 
-    let host = Host {
-        name: host_name,
-        properties,
-    };
+    let host = Host { name, properties };
 
     Ok((input, host))
 }
 
 fn hosts(i: &str) -> IResult<&str, Vec<Host>> {
-    let parser = many0(tuple((space_or_comment0, host_block)));
-    let (input, hosts) = map(parser, |hosts| hosts.into_iter().map(|(_, h)| h).collect())(i)?;
+    let parser = many0(tuple((spaces_or_comments, host_block, spaces_or_comments)));
+    let (input, hosts) = map(parser, |hosts| {
+        hosts.into_iter().map(|(_, h, _)| h).collect()
+    })(i)?;
 
     Ok((input, hosts))
 }
@@ -127,76 +129,120 @@ mod tests {
     }
 
     #[test]
-    fn newline_string() {
-        if string("\n").is_ok() {
-            panic!("Should not be able to parse newline as valid string");
-        }
+    fn valid_string() {
+        let (input, host) = string("Host").expect("Could not parse 'Host'");
+        assert_eq!("", input);
+        assert_eq!("Host", host);
     }
 
     #[test]
-    fn string_all_whitespace() {
-        if string("      ").is_ok() {
-            panic!("Should not be able to parse all-spaces as valid string");
-        }
+    fn valid_string_space() {
+        let (input, host) = string("Host dev").expect("Could not parse 'Host dev'");
+        assert_eq!(" dev", input);
+        assert_eq!("Host", host);
     }
 
     #[test]
-    fn string_begins_with_whitespace() {
-        if string("   this").is_ok() {
-            panic!("Should not be able to parse leading-whitespace string as valid string");
-        }
+    fn space_or_equals_is_equals() {
+        let (input, _) = space_or_equals("=").expect("Could not parse equals");
+        assert_eq!("", input);
     }
 
     #[test]
-    fn string_ends_in_whitespace() {
-        let (input, value) = string("test-str   ").expect("Could not parse string");
-
-        assert_eq!("   ", input);
-        assert_eq!("test-str", value);
+    fn space_or_equals_is_space() {
+        let (input, _) = space_or_equals("      ").expect("Could not parse space");
+        assert_eq!("", input);
     }
 
     #[test]
-    fn string_no_whitespace() {
-        let good_input = "asd123-456...\\[]";
-        let (input, value) = string(good_input).expect("Could not parse valid complicated string");
+    fn space_or_comment_spaces() {
+        let (input, _) = space_or_comment("   ").expect("Could not parse whitespace");
+        assert_eq!("", input);
+    }
+
+    #[test]
+    fn space_or_comment_comment() {
+        let (input, _) = space_or_comment("#this is a comment").expect("Could not parse comment");
+        assert_eq!("", input);
+    }
+
+    #[test]
+    fn space_or_comment_spaces_and_comment() {
+        let (input, _) =
+            space_or_comment("      #comment").expect("Could not parse space and comment");
+        assert_eq!("#comment", input);
+
+        let (input, _) = space_or_comment(input).expect("Could not parse remaining comment");
+        assert_eq!("", input);
+    }
+
+    #[test]
+    fn spaces_and_comments_both() {
+        let (input, _) = spaces_or_comments("     #comment\n\n\n#comment      \n\n")
+            .expect("Could not parse spaces and comment");
+        assert_eq!("", input);
+    }
+
+    #[test]
+    fn many_properties() {
+        let (input, properties) = properties("   \n\n\n      asd 123 345\n\n\nDave yes\n")
+            .expect("Could not parse properties");
+
+        let expected_properties = vec![
+            Property {
+                key: "asd",
+                value: "123 345",
+            },
+            Property {
+                key: "Dave",
+                value: "yes",
+            },
+        ];
+
+        assert_eq!("\n", input);
+        assert_eq!(expected_properties, properties);
+    }
+
+    #[test]
+    fn many_properties_comments() {
+        let data = r"
+            HostName butt   #no butts   
+            Asd=123
+            #moar comment
+
+
+            Blah whatever";
+
+        let (input, properties) =
+            properties(data).expect("Could not parse a mix of properties and comments");
+
+        let expected_properties = vec![
+            Property {
+                key: "HostName",
+                value: "butt",
+            },
+            Property {
+                key: "Asd",
+                value: "123",
+            },
+            Property {
+                key: "Blah",
+                value: "whatever",
+            },
+        ];
 
         assert_eq!("", input);
-        assert_eq!(good_input, value);
+        assert_eq!(expected_properties, properties);
     }
 
     #[test]
-    fn host_line_newline_linefeed() {
-        let (input, host) =
-            host_line("Host dev\n").expect("Could not parse host line ending in '\\n'");
-        assert_eq!("", input);
-        assert_eq!("dev", host);
-    }
-
-    #[test]
-    fn host_line_newline_carriagereturn_linefeed() {
-        let (input, host) =
-            host_line("Host dev-man\r\n").expect("Could not parse host line ending in '\\r\\n'");
-        assert_eq!("", input);
-        assert_eq!("dev-man", host);
-    }
-
-    #[test]
-    fn host_line_no_newline() {
-        let (input, host) =
-            host_line("Host dev").expect("Could not parse host line with no newline");
-        assert_eq!("", input);
-        assert_eq!("dev", host);
-    }
-
-    #[test]
-    fn property_line_newline() {
+    fn property_line_equals() {
         let (input, property) =
-            property_line("      LocalForward      9906 127.0.0.1:3306        \n")
-                .expect("Could not parse property line with line ending in '\\n'");
+            property_line("HostName=dev").expect("Could not parse property line with equals");
 
         let expected_property = Property {
-            key: "LocalForward",
-            value: "9906 127.0.0.1:3306",
+            key: "HostName",
+            value: "dev",
         };
 
         assert_eq!("", input);
@@ -204,59 +250,31 @@ mod tests {
     }
 
     #[test]
-    fn multiple_properties() {
-        let (input, properties) = properties(
-            "   \n\n\n HostName database.example.com\n    IdentityFile ~/.ssh/coolio.example.key\n\n\n\n\n\n\nAsd 123",
-        )
-        .expect("Could not parse property collection");
+    fn property_line_space() {
+        let (input, property) =
+            property_line("HostName dev").expect("Could not parse property line with space");
 
-        let expected_properties = vec![
-            Property {
-                key: "HostName",
-                value: "database.example.com",
-            },
-            Property {
-                key: "IdentityFile",
-                value: "~/.ssh/coolio.example.key",
-            },
-            Property {
-                key: "Asd",
-                value: "123",
-            },
-        ];
+        let expected_property = Property {
+            key: "HostName",
+            value: "dev",
+        };
 
         assert_eq!("", input);
-        assert_eq!(expected_properties, properties);
+        assert_eq!(expected_property, property);
     }
 
     #[test]
-    fn multiple_properties_hostline_end() {
-        let (input, properties) = properties(
-            "   \n\n\n HostName database.example.com\n     \
-             IdentityFile ~/.ssh/coolio.example.key\
-             \n\n\n\n\n\n\n\
-             Asd 123\n      \
-             Host devv\n\n",
-        )
-        .expect("Could not parse property collection");
+    fn host_line_equals() {
+        let (input, host) = host_line("Host=dev").expect("Could not parse host with equals");
+        assert_eq!("", input);
+        assert_eq!("dev", host);
+    }
 
-        let expected_properties = vec![
-            Property {
-                key: "HostName",
-                value: "database.example.com",
-            },
-            Property {
-                key: "IdentityFile",
-                value: "~/.ssh/coolio.example.key",
-            },
-            Property {
-                key: "Asd",
-                value: "123",
-            },
-        ];
-
-        assert_eq!("Host devv\n\n", input);
-        assert_eq!(expected_properties, properties);
+    #[test]
+    fn host_line_space() {
+        let (input, host) = host_line("host dev").expect("Could not parse host with space");
+        assert_eq!("", input);
+        assert_eq!("dev", host);
     }
 
     #[test]
@@ -276,7 +294,7 @@ mod tests {
             }],
         };
 
-        assert_eq!("", input);
+        assert_eq!("\n\n", input);
         assert_eq!(expected_host, host);
     }
 
@@ -294,7 +312,7 @@ mod tests {
             properties: vec![],
         };
 
-        assert_eq!("", input);
+        assert_eq!("\n   \n\n", input);
         assert_eq!(expected_host, host);
     }
 
@@ -313,7 +331,7 @@ mod tests {
             properties: vec![],
         };
 
-        assert_eq!("Host zzz", input);
+        assert_eq!("\n   \n\nHost zzz", input);
         assert_eq!(expected_host, host);
     }
 
@@ -350,6 +368,7 @@ mod tests {
             Test zz\
             \n\n\n\n\n\n\n\
             Host gregg\n
+            #wut
             HostName hello\n\n\n\n
             Other thing\n\n\n",
         )
@@ -423,37 +442,4 @@ mod tests {
         assert_eq!(bad_input, input);
         assert_eq!(expected_hosts, hosts);
     }
-
-    #[test]
-    fn comsume_comment() {
-        let (input, result) = comment("#this is a comment").expect("Could not parse comment line");
-
-        assert_eq!("", input);
-        assert_eq!("", result);
-    }
-
-    #[test]
-    fn ignore_comment() {
-        let (input, _) = comment("# IGNORE ME\nHost asd\nLocal something")
-            .expect("Could not parse comment data");
-
-        assert_eq!("Host asd\nLocal something", input);
-    }
-
-    /*#[test]
-    fn ignore_comments_and_whitespace() {
-        let (input, _) = comment_or_whitespace("\
-            \n\
-            \n\
-            #IGNORE ME\n\
-            #      YUUUUUP
-            \n\
-            \n           \
-            #NOPE
-            \n\
-            Host asd\n\
-            Local something").expect("Could not parse comment data");
-
-        assert_eq!("Host asd\nLocal something", input);
-    }*/
 }
