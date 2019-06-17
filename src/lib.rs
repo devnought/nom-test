@@ -29,12 +29,12 @@ pub fn parse(data: &str) -> Result<Vec<Host>, ()> {
 }
 
 fn string(i: &str) -> IResult<&str, &str> {
-    take_while1(|c: char| !c.is_whitespace())(i)
+    take_while1(|c: char| !c.is_whitespace() && c != '#')(i)
 }
 
 fn comment(i: &str) -> IResult<&str, &str> {
-    let parser = tuple((space0, tag("#"), not_line_ending, opt(line_ending)));
-    let (input, (_, _, _, _)) = parser(i)?;
+    let parser = tuple((tag("#"), not_line_ending, opt(line_ending)));
+    let (input, (_, _, _)) = parser(i)?;
 
     Ok((input, ""))
 }
@@ -77,7 +77,7 @@ fn property_line(i: &str) -> IResult<&str, Property> {
 }
 
 fn properties(i: &str) -> IResult<&str, Vec<Property>> {
-    let parser = many0(tuple((multispace0, property_line, multispace0)));
+    let parser = many0(tuple((whitespace_or_comment, property_line, whitespace_or_comment)));
 
     let (input, props) = map(parser, |props| {
         props.into_iter().map(|(_, p, _)| p).collect()
@@ -99,7 +99,7 @@ fn host_block(i: &str) -> IResult<&str, Host> {
 }
 
 fn hosts(i: &str) -> IResult<&str, Vec<Host>> {
-    let parser = many0(tuple((multispace0, host_block, multispace0)));
+    let parser = many0(tuple((whitespace_or_comment, host_block, whitespace_or_comment)));
     let (input, hosts) = map(parser, |hosts| {
         hosts.into_iter().map(|(_, h, _)| h).collect()
     })(i)?;
