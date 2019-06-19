@@ -5,7 +5,7 @@
 
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_while1},
+    bytes::complete::{tag, tag_no_case, take_while1},
     character::complete::{line_ending, multispace0, multispace1, not_line_ending, space0, space1},
     combinator::{map, not, opt, peek},
     multi::{many0, many1},
@@ -66,7 +66,7 @@ fn not_comment(i: &str) -> IResult<&str, &str> {
 }
 
 fn host_line(i: &str) -> IResult<&str, &str> {
-    let parser = tuple((tag("Host"), space_or_equals, string));
+    let parser = tuple((tag_no_case("host"), space_or_equals, string));
     let (input, (_, _, name)) = parser(i)?;
 
     Ok((input, name))
@@ -250,7 +250,7 @@ mod tests {
 
     #[test]
     fn host_line_space() {
-        let (input, host) = host_line("Host dev").expect("Could not parse host with space");
+        let (input, host) = host_line("host dev").expect("Could not parse host with space");
         assert_eq!("", input);
         assert_eq!("dev", host);
     }
