@@ -123,6 +123,18 @@ mod tests {
     }
 
     #[test]
+    fn space_or_equals_is_equals() {
+        let (input, _) = space_or_equals("=").expect("Could not parse equals");
+        assert_eq!("", input);
+    }
+
+    #[test]
+    fn space_or_equals_is_space() {
+        let (input, _) = space_or_equals("      ").expect("Could not parse space");
+        assert_eq!("", input);
+    }
+
+    #[test]
     fn space_or_comment_spaces() {
         let (input, _) = space_or_comment("   ").expect("Could not parse whitespace");
         assert_eq!("", input);
