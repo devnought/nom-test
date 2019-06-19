@@ -30,7 +30,7 @@ pub fn parse(_data: &str) -> Result<Vec<Host>, ()> {
 }
 
 fn string(i: &str) -> IResult<&str, &str> {
-    take_while1(|c: char| !c.is_whitespace() && c != '#')(i)
+    take_while1(|c: char| !c.is_whitespace() && c != '=' && c != '#')(i)
 }
 
 fn comment(i: &str) -> IResult<&str, &str> {
@@ -98,8 +98,6 @@ fn properties(i: &str) -> IResult<&str, Vec<Property>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // TODO: Write tests for equal separators
 
     #[test]
     fn empty_string() {
@@ -187,7 +185,7 @@ mod tests {
     fn many_properties_comments() {
         let data = r"
             HostName butt   #no butts   
-            Asd 123
+            Asd=123
             #moar comment
 
 
@@ -213,5 +211,47 @@ mod tests {
 
         assert_eq!("", input);
         assert_eq!(expected_properties, properties);
+    }
+
+    #[test]
+    fn property_line_equals() {
+        let (input, property) =
+            property_line("HostName=dev").expect("Could not parse property line with equals");
+
+        let expected_property = Property {
+            key: "HostName",
+            value: "dev",
+        };
+
+        assert_eq!("", input);
+        assert_eq!(expected_property, property);
+    }
+
+    #[test]
+    fn property_line_space() {
+        let (input, property) =
+            property_line("HostName dev").expect("Could not parse property line with space");
+
+        let expected_property = Property {
+            key: "HostName",
+            value: "dev",
+        };
+
+        assert_eq!("", input);
+        assert_eq!(expected_property, property);
+    }
+
+    #[test]
+    fn host_line_equals() {
+        let (input, host) = host_line("Host=dev").expect("Could not parse host with equals");
+        assert_eq!("", input);
+        assert_eq!("dev", host);
+    }
+
+    #[test]
+    fn host_line_space() {
+        let (input, host) = host_line("Host dev").expect("Could not parse host with space");
+        assert_eq!("", input);
+        assert_eq!("dev", host);
     }
 }
