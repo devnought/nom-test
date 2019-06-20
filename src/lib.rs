@@ -6,9 +6,9 @@
 use nom::{
     branch::alt,
     bytes::complete::{tag, tag_no_case, take_while1},
-    character::complete::{line_ending, multispace0, multispace1, not_line_ending, space0, space1},
-    combinator::{map, not, opt, peek},
-    multi::{many0, many1},
+    character::complete::{multispace1, not_line_ending, space1},
+    combinator::{map, not, peek},
+    multi::many0,
     sequence::tuple,
     IResult,
 };
@@ -25,8 +25,8 @@ pub struct Property<'a> {
     value: &'a str,
 }
 
-pub fn parse(_data: &str) -> Result<Vec<Host>, ()> {
-    Ok(vec![])
+pub fn parse(data: &str) -> Result<Vec<Host>, ()> {
+    hosts(data).map(|(_, hosts)| hosts).map_err(|_| ())
 }
 
 fn string(i: &str) -> IResult<&str, &str> {
@@ -89,10 +89,27 @@ fn property_line(i: &str) -> IResult<&str, Property> {
 
 fn properties(i: &str) -> IResult<&str, Vec<Property>> {
     let parser = many0(tuple((spaces_or_comments, property_line)));
-    let (input, lines) = parser(i)?;
-    let mapped_lines = lines.into_iter().map(|(_, x)| x).collect::<Vec<_>>();
+    let (input, lines) = map(parser, |props| props.into_iter().map(|(_, x)| x).collect())(i)?;
 
-    Ok((input, mapped_lines))
+    Ok((input, lines))
+}
+
+fn host_block(i: &str) -> IResult<&str, Host> {
+    let parser = tuple((spaces_or_comments, host_line, properties));
+    let (input, (_, name, properties)) = parser(i)?;
+
+    let host = Host { name, properties };
+
+    Ok((input, host))
+}
+
+fn hosts(i: &str) -> IResult<&str, Vec<Host>> {
+    let parser = many0(tuple((spaces_or_comments, host_block, spaces_or_comments)));
+    let (input, hosts) = map(parser, |hosts| {
+        hosts.into_iter().map(|(_, h, _)| h).collect()
+    })(i)?;
+
+    Ok((input, hosts))
 }
 
 #[cfg(test)]
@@ -253,5 +270,135 @@ mod tests {
         let (input, host) = host_line("host dev").expect("Could not parse host with space");
         assert_eq!("", input);
         assert_eq!("dev", host);
+    }
+
+    #[test]
+    fn single_host_block() {
+        let (input, host) = host_block(
+            "  \n\n   \n\n\
+             \n       Host dev\n   \
+             Asd      123     \n\n",
+        )
+        .expect("Could not parse single host block");
+
+        let expected_host = Host {
+            name: "dev",
+            properties: vec![Property {
+                key: "Asd",
+                value: "123",
+            }],
+        };
+
+        assert_eq!("\n\n", input);
+        assert_eq!(expected_host, host);
+    }
+
+    #[test]
+    fn single_host_block_no_properties() {
+        let (input, host) = host_block(
+            "  \n\n   \n\n\
+             \n       Host dev\n   \
+             \n\n",
+        )
+        .expect("Could not parse single host block");
+
+        let expected_host = Host {
+            name: "dev",
+            properties: vec![],
+        };
+
+        assert_eq!("\n   \n\n", input);
+        assert_eq!(expected_host, host);
+    }
+
+    #[test]
+    fn two_host_blocks_no_properties() {
+        let (input, host) = host_block(
+            "  \n\n   \n\n\
+             \n       Host dev\n   \
+             \n\n\
+             Host zzz",
+        )
+        .expect("Could not parse single host block pair");
+
+        let expected_host = Host {
+            name: "dev",
+            properties: vec![],
+        };
+
+        assert_eq!("\n   \n\nHost zzz", input);
+        assert_eq!(expected_host, host);
+    }
+
+    #[test]
+    fn many_hosts_no_properties() {
+        let (input, hosts) = hosts(
+            "  \n\n   \n\n\
+             \n       Host dev\n   \
+             \n\n\
+             Host zzz",
+        )
+        .expect("Could not parse multiple empty hosts");
+
+        let expected_hosts = vec![
+            Host {
+                name: "dev",
+                properties: vec![],
+            },
+            Host {
+                name: "zzz",
+                properties: vec![],
+            },
+        ];
+
+        assert_eq!("", input);
+        assert_eq!(expected_hosts, hosts);
+    }
+
+    #[test]
+    fn many_hosts() {
+        let (input, hosts) = hosts(
+            "\n\n\n\n     Host old    \n\
+            Asd    123\n\
+            Test zz\
+            \n\n\n\n\n\n\n\
+            Host gregg\n
+            #wut
+            HostName hello\n\n\n\n
+            Other thing\n\n\n",
+        )
+        .expect("Could not parse multple hosts with their properties");
+
+        let expected_hosts = vec![
+            Host {
+                name: "old",
+                properties: vec![
+                    Property {
+                        key: "Asd",
+                        value: "123",
+                    },
+                    Property {
+                        key: "Test",
+                        value: "zz",
+                    },
+                ],
+            },
+            Host {
+                name: "gregg",
+                properties: vec![
+                    Property {
+                        key: "HostName",
+                        value: "hello",
+                    },
+                    Property {
+                        key: "Other",
+                        value: "thing",
+                    },
+                ],
+            },
+        ];
+
+        assert_eq!("", input);
+        assert_eq!(expected_hosts, hosts);
     }
 }
